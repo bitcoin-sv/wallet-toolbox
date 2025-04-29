@@ -17,13 +17,14 @@ Links: [API](#api), [Interfaces](#interfaces), [Classes](#classes), [Functions](
 
 | | |
 | --- | --- |
-| [KeyPairAddress](#interface-keypairaddress) | [SetupWalletClientArgs](#interface-setupwalletclientargs) |
-| [SetupClientWalletArgs](#interface-setupclientwalletargs) | [SetupWalletIdb](#interface-setupwalletidb) |
-| [SetupClientWalletClientArgs](#interface-setupclientwalletclientargs) | [SetupWalletIdbArgs](#interface-setupwalletidbargs) |
-| [SetupEnv](#interface-setupenv) | [SetupWalletKnex](#interface-setupwalletknex) |
-| [SetupWallet](#interface-setupwallet) | [SetupWalletKnexArgs](#interface-setupwalletknexargs) |
-| [SetupWalletArgs](#interface-setupwalletargs) | [SetupWalletMySQLArgs](#interface-setupwalletmysqlargs) |
+| [KeyPairAddress](#interface-keypairaddress) | [SetupWalletIdb](#interface-setupwalletidb) |
+| [SetupClientWalletArgs](#interface-setupclientwalletargs) | [SetupWalletIdbArgs](#interface-setupwalletidbargs) |
+| [SetupClientWalletClientArgs](#interface-setupclientwalletclientargs) | [SetupWalletKnex](#interface-setupwalletknex) |
+| [SetupEnv](#interface-setupenv) | [SetupWalletKnexArgs](#interface-setupwalletknexargs) |
+| [SetupWallet](#interface-setupwallet) | [SetupWalletMySQLArgs](#interface-setupwalletmysqlargs) |
+| [SetupWalletArgs](#interface-setupwalletargs) | [SetupWalletPostgreSQLArgs](#interface-setupwalletpostgresqlargs) |
 | [SetupWalletClient](#interface-setupwalletclient) | [SetupWalletSQLiteArgs](#interface-setupwalletsqliteargs) |
+| [SetupWalletClientArgs](#interface-setupwalletclientargs) |  |
 
 Links: [API](#api), [Interfaces](#interfaces), [Classes](#classes), [Functions](#functions), [Types](#types), [Variables](#variables)
 
@@ -144,6 +145,7 @@ export interface SetupEnv {
     taalApiKey: string;
     devKeys: Record<string, string>;
     mySQLConnection: string;
+    postgresConnection: string;
 }
 ```
 
@@ -197,6 +199,15 @@ Must be valid to make use of MySQL `Setup` class support.
 
 ```ts
 mySQLConnection: string
+```
+
+###### Property postgresConnection
+
+A PostgreSQL connection string including user and password properties.
+Must be valid to make use of PostgreSQL `Setup` class support.
+
+```ts
+postgresConnection: string
 ```
 
 ###### Property taalApiKey
@@ -520,6 +531,19 @@ See also: [SetupWalletArgs](./setup.md#interface-setupwalletargs)
 Links: [API](#api), [Interfaces](#interfaces), [Classes](#classes), [Functions](#functions), [Types](#types), [Variables](#variables)
 
 ---
+##### Interface: SetupWalletPostgreSQLArgs
+
+```ts
+export interface SetupWalletPostgreSQLArgs extends SetupWalletArgs {
+    databaseName: string;
+}
+```
+
+See also: [SetupWalletArgs](./setup.md#interface-setupwalletargs)
+
+Links: [API](#api), [Interfaces](#interfaces), [Classes](#classes), [Functions](#functions), [Types](#types), [Variables](#variables)
+
+---
 ##### Interface: SetupWalletSQLiteArgs
 
 ```ts
@@ -573,6 +597,7 @@ MY_MAIN_IDENTITY2 = '${mainIdentityKey2}'
 MAIN_TAAL_API_KEY='mainnet_9596de07e92300c6287e4393594ae39c'
 TEST_TAAL_API_KEY='testnet_0e6cf72133b43ea2d7861da2a38684e3'
 MYSQL_CONNECTION='{"port":3306,"host":"127.0.0.1","user":"root","password":"your_password","database":"your_database", "timezone": "Z"}'
+POSTGRES_CONNECTION='{"port":5432,"host":"127.0.0.1","user":"postgres","password":"your_password","database":"your_database"}'
 DEV_KEYS = '{
     "${testIdentityKey1}": "${testPrivKey1.toString()}",
     "${testIdentityKey2}": "${testPrivKey2.toString()}",
@@ -589,6 +614,7 @@ DEV_KEYS = '{
         const filePath = chain === "main" ? process.env.MY_MAIN_FILEPATH : process.env.MY_TEST_FILEPATH;
         const DEV_KEYS = process.env.DEV_KEYS || "{}";
         const mySQLConnection = process.env.MYSQL_CONNECTION || "{}";
+        const postgresConnection = process.env.POSTGRES_CONNECTION || "{}";
         const taalApiKey = verifyTruthy(chain === "main" ? process.env.MAIN_TAAL_API_KEY : process.env.TEST_TAAL_API_KEY, `.env value for '${chain.toUpperCase()}_TAAL_API_KEY' is required.`);
         if (!identityKey || !identityKey2)
             throw new sdk.WERR_INVALID_OPERATION(".env is not a valid SetupEnv configuration.");
@@ -599,7 +625,8 @@ DEV_KEYS = '{
             filePath,
             taalApiKey,
             devKeys: JSON.parse(DEV_KEYS) as Record<string, string>,
-            mySQLConnection
+            mySQLConnection,
+            postgresConnection
         };
     }
     static async createWallet(args: SetupWalletArgs): Promise<SetupWallet> {
@@ -763,6 +790,20 @@ DEV_KEYS = '{
         const knex = makeKnex(config);
         return knex;
     }
+    static createPostgreSQLKnex(connection: string, database?: string): Knex {
+        const c = JSON.parse(connection) as Knex.PgConnectionConfig;
+        if (database) {
+            c.database = database;
+        }
+        const config: Knex.Config = {
+            client: "pg",
+            connection: c,
+            useNullAsDefault: true,
+            pool: { min: 0, max: 7, idleTimeoutMillis: 15000 }
+        };
+        const knex = makeKnex(config);
+        return knex;
+    }
     static async createWalletMySQL(args: SetupWalletMySQLArgs): Promise<SetupWalletKnex> {
         return await this.createWalletKnex({
             ...args,
@@ -775,10 +816,16 @@ DEV_KEYS = '{
             knex: Setup.createSQLiteKnex(args.filePath)
         });
     }
+    static async createWalletPostgreSQL(args: SetupWalletPostgreSQLArgs): Promise<SetupWalletKnex> {
+        return await this.createWalletKnex({
+            ...args,
+            knex: Setup.createPostgreSQLKnex(args.env.postgresConnection, args.databaseName)
+        });
+    }
 }
 ```
 
-See also: [Chain](./client.md#type-chain), [KeyPairAddress](./setup.md#interface-keypairaddress), [Monitor](./monitor.md#class-monitor), [PrivilegedKeyManager](./client.md#class-privilegedkeymanager), [ScriptTemplateUnlock](./client.md#interface-scripttemplateunlock), [Services](./services.md#class-services), [SetupEnv](./setup.md#interface-setupenv), [SetupWallet](./setup.md#interface-setupwallet), [SetupWalletArgs](./setup.md#interface-setupwalletargs), [SetupWalletClient](./setup.md#interface-setupwalletclient), [SetupWalletClientArgs](./setup.md#interface-setupwalletclientargs), [SetupWalletKnex](./setup.md#interface-setupwalletknex), [SetupWalletKnexArgs](./setup.md#interface-setupwalletknexargs), [SetupWalletMySQLArgs](./setup.md#interface-setupwalletmysqlargs), [SetupWalletSQLiteArgs](./setup.md#interface-setupwalletsqliteargs), [StorageClient](./storage.md#class-storageclient), [StorageKnex](./storage.md#class-storageknex), [WERR_INVALID_OPERATION](./client.md#class-werr_invalid_operation), [Wallet](./client.md#class-wallet), [WalletStorageManager](./storage.md#class-walletstoragemanager), [createAction](./storage.md#function-createaction), [verifyTruthy](./client.md#function-verifytruthy)
+See also: [Chain](./client.md#type-chain), [KeyPairAddress](./setup.md#interface-keypairaddress), [Monitor](./monitor.md#class-monitor), [PrivilegedKeyManager](./client.md#class-privilegedkeymanager), [ScriptTemplateUnlock](./client.md#interface-scripttemplateunlock), [Services](./services.md#class-services), [SetupEnv](./setup.md#interface-setupenv), [SetupWallet](./setup.md#interface-setupwallet), [SetupWalletArgs](./setup.md#interface-setupwalletargs), [SetupWalletClient](./setup.md#interface-setupwalletclient), [SetupWalletClientArgs](./setup.md#interface-setupwalletclientargs), [SetupWalletKnex](./setup.md#interface-setupwalletknex), [SetupWalletKnexArgs](./setup.md#interface-setupwalletknexargs), [SetupWalletMySQLArgs](./setup.md#interface-setupwalletmysqlargs), [SetupWalletPostgreSQLArgs](./setup.md#interface-setupwalletpostgresqlargs), [SetupWalletSQLiteArgs](./setup.md#interface-setupwalletsqliteargs), [StorageClient](./storage.md#class-storageclient), [StorageKnex](./storage.md#class-storageknex), [WERR_INVALID_OPERATION](./client.md#class-werr_invalid_operation), [Wallet](./client.md#class-wallet), [WalletStorageManager](./storage.md#class-walletstoragemanager), [createAction](./storage.md#function-createaction), [verifyTruthy](./client.md#function-verifytruthy)
 
 ###### Method createStorageKnex
 
@@ -912,6 +959,7 @@ static getEnv(chain: sdk.Chain): SetupEnv {
     const filePath = chain === "main" ? process.env.MY_MAIN_FILEPATH : process.env.MY_TEST_FILEPATH;
     const DEV_KEYS = process.env.DEV_KEYS || "{}";
     const mySQLConnection = process.env.MYSQL_CONNECTION || "{}";
+    const postgresConnection = process.env.POSTGRES_CONNECTION || "{}";
     const taalApiKey = verifyTruthy(chain === "main" ? process.env.MAIN_TAAL_API_KEY : process.env.TEST_TAAL_API_KEY, `.env value for '${chain.toUpperCase()}_TAAL_API_KEY' is required.`);
     if (!identityKey || !identityKey2)
         throw new sdk.WERR_INVALID_OPERATION(".env is not a valid SetupEnv configuration.");
@@ -922,7 +970,8 @@ static getEnv(chain: sdk.Chain): SetupEnv {
         filePath,
         taalApiKey,
         devKeys: JSON.parse(DEV_KEYS) as Record<string, string>,
-        mySQLConnection
+        mySQLConnection,
+        postgresConnection
     };
 }
 ```
@@ -965,6 +1014,7 @@ MY_MAIN_IDENTITY2 = '${mainIdentityKey2}'
 MAIN_TAAL_API_KEY='mainnet_9596de07e92300c6287e4393594ae39c'
 TEST_TAAL_API_KEY='testnet_0e6cf72133b43ea2d7861da2a38684e3'
 MYSQL_CONNECTION='{"port":3306,"host":"127.0.0.1","user":"root","password":"your_password","database":"your_database", "timezone": "Z"}'
+POSTGRES_CONNECTION='{"port":5432,"host":"127.0.0.1","user":"postgres","password":"your_password","database":"your_database"}'
 DEV_KEYS = '{
     "${testIdentityKey1}": "${testPrivKey1.toString()}",
     "${testIdentityKey2}": "${testPrivKey2.toString()}",

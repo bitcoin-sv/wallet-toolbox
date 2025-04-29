@@ -1,6 +1,6 @@
-import { _tu, TestSetup1 } from '../utils/TestUtilsWalletStorage'
 import { sdk, StorageProvider } from '../../src/index.client'
 import { StorageKnex } from '../../src/storage/StorageKnex'
+import { _tu, TestSetup1 } from '../utils/TestUtilsWalletStorage'
 
 describe('count tests', () => {
   jest.setTimeout(99999999)
@@ -28,6 +28,18 @@ describe('count tests', () => {
           ...StorageKnex.defaultOptions(),
           chain,
           knex: knexMySQL
+        })
+      )
+    }
+
+    // Add PostgreSQL testing if configured
+    if (env.runPostgres) {
+      const knexPostgreSQL = _tu.createLocalPostgreSQL('storagecounttest')
+      storages.push(
+        new StorageKnex({
+          ...StorageKnex.defaultOptions(),
+          chain,
+          knex: knexPostgreSQL
         })
       )
     }
